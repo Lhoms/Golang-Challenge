@@ -11,35 +11,47 @@ type PriceService interface {
 	GetPriceFor(itemCode string) (float64, error)
 }
 
+// price itself with the creation date
+type Price struct {
+	price			float64
+	creationDate	time.Time
+}
+
+// Check price expiration by duration
+func (p *Price) checkExpiration(maxAge time.Duration) bool {
+	return (time.Now().Sub(p.creationDate)) < maxAge
+}
+
 // TransparentCache is a cache that wraps the actual service
 // The cache will remember prices we ask for, so that we don't have to wait on every call
 // Cache should only return a price if it is not older than "maxAge", so that we don't get stale prices
 type TransparentCache struct {
 	actualPriceService PriceService
 	maxAge             time.Duration
-	prices             map[string]float64
+	prices             map[string]Price
 }
 
 func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) *TransparentCache {
 	return &TransparentCache{
 		actualPriceService: actualPriceService,
 		maxAge:             maxAge,
-		prices:             map[string]float64{},
+		prices:             map[string]Price{},
 	}
 }
 
 // GetPriceFor gets the price for the item, either from the cache or the actual service if it was not cached or too old
 func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
-	price, ok := c.prices[itemCode]
-	if ok {
-		// TODO: check that the price was retrieved less than "maxAge" ago!
-		return price, nil
+	priceStruct, ok := c.prices[itemCode]
+
+	if ok && priceStruct.checkExpiration(c.maxAge) {
+		return priceStruct.price, nil
 	}
 	price, err := c.actualPriceService.GetPriceFor(itemCode)
 	if err != nil {
 		return 0, fmt.Errorf("getting price from service : %v", err.Error())
 	}
-	c.prices[itemCode] = price
+
+	c.prices[itemCode] = Price{price, time.Now()}
 	return price, nil
 }
 
