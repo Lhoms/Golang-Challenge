@@ -12,3 +12,5 @@
 - Test added. The existing test was not checking GetPricesFor in case of error, only GetPriceFor.
 
 - In the test I had an intermittent issue related a race condition in the map, that's why I added a Mutex to sync it. (I read about a Map Sync but it was less recommended than Mutex) 
+
+- At the end I did a simple refactor to delegate the requests and the collect of these request, so the principal func GetPricesFor is more expressive.

@@ -72,30 +72,34 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 	return price, nil
 }
 
-func processRequest(cache *TransparentCache, c chan PriceRequest, itemCode string) {
+// GetPricesFor gets the prices for several items at once, some might be found in the cache, others might not
+// If any of the operations returns an error, it should return an error as well
+func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
+	messages := make(chan PriceRequest, len(itemCodes))
+
+	// parallelize sending each 'get price' to a go routine
+	for _, itemCode := range itemCodes {
+		go sendPriceRequest(c, messages, itemCode)
+	}
+
+	return collectRequest(messages)
+}
+
+func sendPriceRequest(cache *TransparentCache, c chan PriceRequest, itemCode string) {
 	price, err := cache.GetPriceFor(itemCode)
 	c <- PriceRequest{price, err}
 }
 
-// GetPricesFor gets the prices for several items at once, some might be found in the cache, others might not
-// If any of the operations returns an error, it should return an error as well
-func (c *TransparentCache) GetPricesFor(itemCodes ...string) ([]float64, error) {
+// getting each response from 'messages' channel, until finish or error
+func collectRequest(messages chan PriceRequest) ([]float64, error) {
 	results := []float64{}
-	messages := make(chan PriceRequest, len(itemCodes))
 
-	// parallelize sending each get to a go routine
-	for _, itemCode := range itemCodes {
-		go processRequest(c, messages, itemCode)
-	}
-
-	// getting each response from 'messages' channel, until finish or error
-	for i := len(itemCodes); i > 0; i-- {
+	for i := cap(messages); i > 0; i-- {
 		request := <-messages
 		if request.err != nil {
 			return []float64{}, request.err
 		}
 		results = append(results, request.price)
 	}
-
 	return results, nil
 }
