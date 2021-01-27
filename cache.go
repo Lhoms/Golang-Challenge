@@ -3,6 +3,7 @@ package sample1
 import (
 	"fmt"
 	"time"
+	"sync"
 )
 
 // PriceService is a service that we can use to get prices for the items
@@ -45,6 +46,15 @@ func NewTransparentCache(actualPriceService PriceService, maxAge time.Duration) 
 	}
 }
 
+// Mutex used to sync prices map
+var m = sync.Mutex{}
+
+func (c *TransparentCache) sequentialPriceSet(itemCode string, p Price) {
+	m.Lock()
+	c.prices[itemCode] = p
+	m.Unlock()
+}
+
 // GetPriceFor gets the price for the item, either from the cache or the actual service if it was not cached or too old
 func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 	priceStruct, ok := c.prices[itemCode]
@@ -57,7 +67,8 @@ func (c *TransparentCache) GetPriceFor(itemCode string) (float64, error) {
 		return 0, fmt.Errorf("getting price from service : %v", err.Error())
 	}
 
-	c.prices[itemCode] = Price{price, time.Now()}
+	c.sequentialPriceSet(itemCode, Price{price, time.Now()})
+
 	return price, nil
 }
 
